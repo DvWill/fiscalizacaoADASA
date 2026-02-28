@@ -1,0 +1,1898 @@
+<!doctype html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Fiscalizações</title>
+
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css">
+  <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+    .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
+      background-color: rgba(59, 130, 246, 0.3) !important;
+    }
+    .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+      background-color: #3b82f6 !important;
+      color: white !important;
+      font-weight: 600 !important;
+    }
+
+    .leaflet-popup-content-wrapper { border-radius: 12px !important; }
+    .leaflet-popup-content { margin: 0 !important; }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .slide-in { animation: slideIn 0.3s ease-out; }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+
+    .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .status-andamento { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #78350f; }
+    .status-concluida { background: linear-gradient(135deg, #34d399, #10b981); color: #064e3b; }
+    .status-pendente { background: linear-gradient(135deg, #f87171, #ef4444); color: #7f1d1d; }
+
+    .glass-card { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(71, 85, 105, 0.5); }
+    .input-field { transition: all 0.2s ease; }
+    .input-field:focus { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
+    .btn-primary { background: linear-gradient(135deg, #3b82f6, #2563eb); transition: all 0.2s ease; }
+    .btn-primary:hover { background: linear-gradient(135deg, #2563eb, #1d4ed8); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
+    .metric-card { background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9)); border: 1px solid rgba(71, 85, 105, 0.4); }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.15); opacity: 0.85; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    body { box-sizing: border-box; }
+  </style>
+</head>
+
+<body class="h-full bg-slate-900 text-slate-100 overflow-hidden">
+  <div id="app" class="h-full w-full flex flex-col">
+
+    <!-- Header -->
+    <header class="glass-card border-b border-slate-700 px-6 py-4 flex items-center justify-between z-50">
+      <div class="flex items-center gap-4">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+          </svg>
+        </div>
+        <div>
+          <h1 id="app-title" class="text-xl font-bold text-white">Sistema de Fiscalizações</h1>
+          <p id="app-subtitle" class="text-sm text-slate-400">Monitoramento em Tempo Real</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- Botão Filtros -->
+        <button onclick="toggleFiltersPanel(true)"
+          class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors flex items-center gap-2 text-sm font-medium">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          Filtros
+        </button>
+
+        <button id="dashboard-btn" onclick="toggleDashboard()"
+          class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors flex items-center gap-2 text-sm font-medium">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Dashboard
+        </button>
+
+        <button onclick="openImportModal()"
+          class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors flex items-center gap-2 text-sm font-medium">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Importar
+        </button>
+
+        <button onclick="exportToCSV()"
+          class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors flex items-center gap-2 text-sm font-medium">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Exportar
+        </button>
+
+        <button onclick="openAddModal()" class="btn-primary px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Nova Fiscalização
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex-1 relative overflow-hidden">
+
+      <!-- Drawer Overlay -->
+      <div
+        id="filters-overlay"
+        class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[1200]"
+        onclick="toggleFiltersPanel(false)">
+      </div>
+
+      <!-- Filters Drawer -->
+      <aside
+        id="filters-drawer"
+        class="fixed top-[72px] left-0 h-[calc(100%-72px)] w-80 glass-card border-r border-slate-700 p-5 overflow-y-auto custom-scrollbar z-[1300]
+              -translate-x-full transition-transform duration-300 ease-out">
+
+        <!-- Header do Drawer -->
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold flex items-center gap-2">
+            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            Filtros
+          </h2>
+
+          <button onclick="toggleFiltersPanel(false)" class="p-2 rounded-lg hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Conteúdo dos filtros -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Buscar</label>
+            <input type="text" id="filter-search" oninput="applyFilters()" placeholder="ID, Processo, Destinatário..."
+              class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Região Administrativa</label>
+            <select id="filter-regiao" onchange="applyFilters()"
+              class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-blue-500">
+              <option value="">Todas as Regiões</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Situação</label>
+            <select id="filter-situacao" onchange="applyFilters()"
+              class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-blue-500">
+              <option value="">Todas as Situações</option>
+              <option value="Em Andamento">Em Andamento</option>
+              <option value="Concluída">Concluída</option>
+              <option value="Pendente">Pendente</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Ano</label>
+            <select id="filter-ano" onchange="applyFilters()"
+              class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-blue-500">
+              <option value="">Todos os Anos</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Índice de Conformidade</label>
+            <div class="flex items-center gap-3">
+              <input type="range" id="filter-conformidade" min="0" max="100" value="0"
+                oninput="updateConformidadeLabel(); applyFilters()"
+                class="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+              <span id="conformidade-label" class="text-sm font-medium text-blue-400 min-w-[40px]">0%+</span>
+            </div>
+          </div>
+
+          <button onclick="clearFilters()"
+            class="w-full py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors text-sm font-medium flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Limpar Filtros
+          </button>
+        </div>
+
+        <!-- Fiscalizações List -->
+        <div class="mt-6">
+          <h3 class="text-sm font-semibold text-slate-400 mb-3 flex items-center justify-between">
+            <span>Fiscalizações</span>
+            <span id="count-badge" class="px-2 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs">0</span>
+          </h3>
+
+          <div id="fiscalizacoes-list" class="space-y-2 max-h-[calc(100%-400px)] overflow-y-auto custom-scrollbar">
+            <div class="text-center py-8 text-slate-500">
+              <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <p class="text-sm">Nenhuma fiscalização cadastrada</p>
+              <p class="text-xs mt-1">Clique em "Nova Fiscalização" para começar</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Map Container -->
+      <div class="absolute inset-0">
+        <div id="map" class="w-full h-full"></div>
+
+        <!-- Map Legend -->
+        <div class="absolute bottom-6 left-6 glass-card rounded-xl p-4 z-[1000]">
+          <h4 class="text-sm font-semibold mb-3 text-slate-300">Legenda</h4>
+          <div class="space-y-2">
+            <div class="flex items-center gap-2">
+              <div class="w-4 h-4 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500"></div>
+              <span class="text-xs text-slate-400">Em Andamento</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="w-4 h-4 rounded-full bg-gradient-to-br from-emerald-400 to-green-500"></div>
+              <span class="text-xs text-slate-400">Concluída</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="w-4 h-4 rounded-full bg-gradient-to-br from-red-400 to-rose-500"></div>
+              <span class="text-xs text-slate-400">Pendente</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Click to add hint -->
+        <div id="map-hint"
+          class="hidden absolute top-6 left-1/2 -translate-x-1/2 glass-card rounded-xl px-4 py-2 z-[1000] fade-in">
+          <p class="text-sm text-blue-400 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Clique no mapa para selecionar a localização
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard Panel -->
+    <div id="dashboard-panel" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[2000] flex items-center justify-center p-6">
+      <div class="glass-card rounded-2xl w-full max-w-5xl max-h-[90%] overflow-y-auto custom-scrollbar slide-in">
+        <div class="p-6 border-b border-slate-700 flex items-center justify-between sticky top-0 bg-slate-800/90 backdrop-blur-sm z-10">
+          <h2 class="text-xl font-bold flex items-center gap-3">
+            <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Dashboard de Métricas
+          </h2>
+          <button onclick="toggleDashboard()" class="p-2 rounded-lg hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="metric-card rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-sm">Total de Fiscalizações</span>
+                <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+              </div>
+              <p id="metric-total" class="text-3xl font-bold text-white">0</p>
+            </div>
+
+            <div class="metric-card rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-sm">Em Andamento</span>
+                <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+              <p id="metric-andamento" class="text-3xl font-bold text-amber-400">0</p>
+            </div>
+
+            <div class="metric-card rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-sm">Concluídas</span>
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+              <p id="metric-concluida" class="text-3xl font-bold text-emerald-400">0</p>
+            </div>
+
+            <div class="metric-card rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-sm">Conformidade Média</span>
+                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </div>
+              </div>
+              <p id="metric-conformidade" class="text-3xl font-bold text-purple-400">0%</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="metric-card rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-sm">Pendentes</span>
+                <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+              </div>
+              <p id="metric-pendente" class="text-3xl font-bold text-red-400">0</p>
+            </div>
+
+            <div class="metric-card rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-sm">Total Autos de Infração</span>
+                <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+              </div>
+              <p id="metric-ai" class="text-3xl font-bold text-orange-400">0</p>
+            </div>
+
+            <div class="metric-card rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-sm">Total Termos de Notificação</span>
+                <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9m3 0h3" />
+                  </svg>
+                </div>
+              </div>
+              <p id="metric-tn" class="text-3xl font-bold text-cyan-400">0</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="metric-card rounded-xl p-5">
+              <h3 class="text-lg font-semibold mb-4">Distribuição por Situação</h3>
+              <div id="chart-situacao" class="h-48 flex items-end justify-center gap-8"></div>
+            </div>
+
+            <div class="metric-card rounded-xl p-5">
+              <h3 class="text-lg font-semibold mb-4">Por Região Administrativa</h3>
+              <div id="chart-regiao" class="h-48 overflow-y-auto custom-scrollbar space-y-2"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="form-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[2000] flex items-center justify-center p-4">
+      <div class="glass-card rounded-2xl w-full max-w-4xl max-h-[95%] overflow-y-auto custom-scrollbar slide-in">
+        <div class="p-6 border-b border-slate-700 flex items-center justify-between sticky top-0 bg-slate-800/90 backdrop-blur-sm z-10">
+          <h2 id="modal-title" class="text-xl font-bold flex items-center gap-3">
+            <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Nova Fiscalização
+          </h2>
+          <button onclick="closeModal()" class="p-2 rounded-lg hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form id="fiscalizacao-form" onsubmit="handleSubmit(event)" class="p-6">
+          <input type="hidden" id="form-backend-id">
+
+          <!-- Basic Info -->
+          <div class="mb-6">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Informações Básicas
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">ID *</label>
+                <input type="text" id="form-id" required
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="FISC-001">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Nº Processo SEI *</label>
+                <input type="text" id="form-processo-sei" required
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="00000.000000/0000-00">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Ano *</label>
+                <input type="number" id="form-ano" required min="2000" max="2100"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="2024">
+              </div>
+            </div>
+          </div>
+
+          <!-- Localização -->
+          <div class="mb-6">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              </svg>
+              Localização
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Região Administrativa *</label>
+                <select id="form-regiao" required
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-blue-500">
+                  <option value="">Selecione...</option>
+                  <option value="Plano Piloto">Plano Piloto</option>
+                  <option value="Gama">Gama</option>
+                  <option value="Taguatinga">Taguatinga</option>
+                  <option value="Brazlândia">Brazlândia</option>
+                  <option value="Sobradinho">Sobradinho</option>
+                  <option value="Planaltina">Planaltina</option>
+                  <option value="Paranoá">Paranoá</option>
+                  <option value="Núcleo Bandeirante">Núcleo Bandeirante</option>
+                  <option value="Ceilândia">Ceilândia</option>
+                  <option value="Guará">Guará</option>
+                  <option value="Cruzeiro">Cruzeiro</option>
+                  <option value="Samambaia">Samambaia</option>
+                  <option value="Santa Maria">Santa Maria</option>
+                  <option value="São Sebastião">São Sebastião</option>
+                  <option value="Recanto das Emas">Recanto das Emas</option>
+                  <option value="Lago Sul">Lago Sul</option>
+                  <option value="Riacho Fundo">Riacho Fundo</option>
+                  <option value="Lago Norte">Lago Norte</option>
+                  <option value="Candangolândia">Candangolândia</option>
+                  <option value="Águas Claras">Águas Claras</option>
+                  <option value="Riacho Fundo II">Riacho Fundo II</option>
+                  <option value="Sudoeste/Octogonal">Sudoeste/Octogonal</option>
+                  <option value="Varjão">Varjão</option>
+                  <option value="Park Way">Park Way</option>
+                  <option value="SCIA/Estrutural">SCIA/Estrutural</option>
+                  <option value="Sobradinho II">Sobradinho II</option>
+                  <option value="Jardim Botânico">Jardim Botânico</option>
+                  <option value="Itapoã">Itapoã</option>
+                  <option value="SIA">SIA</option>
+                  <option value="Vicente Pires">Vicente Pires</option>
+                  <option value="Fercal">Fercal</option>
+                  <option value="Sol Nascente/Pôr do Sol">Sol Nascente/Pôr do Sol</option>
+                  <option value="Arniqueira">Arniqueira</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Latitude</label>
+                <input type="number" step="any" id="form-lat"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="-15.7942">
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Longitude</label>
+                <input type="number" step="any" id="form-lng"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="-47.8822">
+              </div>
+            </div>
+
+            <button type="button" onclick="enableMapSelection()"
+              class="mt-3 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors text-sm flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              </svg>
+              Selecionar no Mapa
+            </button>
+          </div>
+
+          <!-- Status -->
+          <div class="mb-6">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Status e Classificação
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Situação *</label>
+                <select id="form-situacao" required
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-blue-500">
+                  <option value="">Selecione...</option>
+                  <option value="Em Andamento">Em Andamento</option>
+                  <option value="Concluída">Concluída</option>
+                  <option value="Pendente">Pendente</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Direta ou Indireta</label>
+                <select id="form-direta"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-blue-500">
+                  <option value="">Selecione...</option>
+                  <option value="Direta">Direta</option>
+                  <option value="Indireta">Indireta</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Programada</label>
+                <select id="form-programada"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-blue-500">
+                  <option value="">Selecione...</option>
+                  <option value="Programada">Programada</option>
+                  <option value="Não Programada">Não Programada</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Índice de Conformidade (%)</label>
+                <input type="number" id="form-conformidade" min="0" max="100"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="85">
+              </div>
+            </div>
+          </div>
+
+          <!-- Documento -->
+          <div class="mb-6">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Documento
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Tipo de Documento</label>
+                <input type="text" id="form-tipo-doc"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="Relatório">
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Nº SEI do Documento</label>
+                <input type="text" id="form-sei-doc"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="00000000">
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Data</label>
+                <input type="date" id="form-data"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white focus:outline-none focus:border-blue-500">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Objetivo *</label>
+                <textarea id="form-objetivo" rows="2" required
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 resize-none"
+                  placeholder="Descreva o objetivo da fiscalização..."></textarea>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Destinatário *</label>
+                <input type="text" id="form-destinatario" required
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="Nome do destinatário">
+              </div>
+            </div>
+          </div>
+
+          <!-- Constatações -->
+          <div class="mb-6">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+              Constatações e Ações
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Constatações</label>
+                <textarea id="form-constatacoes" rows="3"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 resize-none"
+                  placeholder="Descreva as constatações..."></textarea>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Constatações Não Conformes</label>
+                <input type="number" id="form-nao-conformes" min="0"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="0">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Recomendações</label>
+                <textarea id="form-recomendacoes" rows="2"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 resize-none"
+                  placeholder="Descreva as recomendações..."></textarea>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Determinações</label>
+                <textarea id="form-determinacoes" rows="2"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 resize-none"
+                  placeholder="Descreva as determinações..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ações Legais -->
+          <div class="mb-6">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+              </svg>
+              Ações Legais
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Termos de Notificação (TN)</label>
+                <input type="number" id="form-tn" min="0"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="0">
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Autos de Infração (AI)</label>
+                <input type="number" id="form-ai" min="0"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="0">
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Termos de Ajuste de Conduta (TAC)</label>
+                <input type="number" id="form-tac" min="0"
+                  class="input-field w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  placeholder="0">
+              </div>
+            </div>
+          </div>
+
+          <!-- Form Actions -->
+          <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-700">
+            <button type="button" onclick="closeModal()"
+              class="px-6 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors font-medium">
+              Cancelar
+            </button>
+            <button type="submit" id="submit-btn"
+              class="btn-primary px-6 py-2.5 rounded-lg font-medium text-white flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <span id="submit-text">Salvar Fiscalização</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Detail Panel -->
+    <div id="detail-panel" class="hidden fixed top-0 right-0 h-full w-full md:w-[500px] glass-card border-l border-slate-700 z-[1500] overflow-y-auto custom-scrollbar slide-in">
+      <div class="p-6 border-b border-slate-700 flex items-center justify-between sticky top-0 bg-slate-800/90 backdrop-blur-sm z-10">
+        <h2 id="detail-title" class="text-xl font-bold">Detalhes da Fiscalização</h2>
+        <div class="flex items-center gap-2">
+          <button id="edit-detail-btn" onclick="editCurrentFiscalizacao()" class="p-2 rounded-lg hover:bg-slate-700 transition-colors text-blue-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+
+          <button id="delete-detail-btn" class="p-2 rounded-lg hover:bg-slate-700 transition-colors text-red-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+
+          <button onclick="closeDetailPanel()" class="p-2 rounded-lg hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="detail-content" class="p-6"></div>
+    </div>
+
+    <!-- Delete Confirmation -->
+    <div id="delete-confirm" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[3000] flex items-center justify-center p-4">
+      <div class="glass-card rounded-2xl p-6 w-full max-w-md fade-in">
+        <div class="text-center">
+          <div class="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold mb-2">Confirmar Exclusão</h3>
+          <p class="text-slate-400 mb-6">Tem certeza que deseja excluir esta fiscalização? Esta ação não pode ser desfeita.</p>
+          <div class="flex items-center justify-center gap-3">
+            <button onclick="cancelDelete()" class="px-6 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors font-medium">
+              Cancelar
+            </button>
+            <button id="confirm-delete-btn" class="px-6 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 transition-colors font-medium text-white">
+              Excluir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div id="import-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[2000] flex items-center justify-center p-4">
+      <div class="glass-card rounded-2xl w-full max-w-2xl slide-in">
+        <div class="p-6 border-b border-slate-700 flex items-center justify-between sticky top-0 bg-slate-800/90 backdrop-blur-sm z-10">
+          <h2 class="text-xl font-bold flex items-center gap-3">
+            <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Importar Fiscalizações
+          </h2>
+          <button onclick="closeImportModal()" class="p-2 rounded-lg hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6">
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-slate-300 mb-3">Cole seus dados (Excel, Google Sheets ou CSV)</label>
+            <textarea id="import-textarea" placeholder="Cole seus dados aqui. Suporta Tab-separated (Excel) ou CSV..."
+              class="w-full h-40 px-4 py-3 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 font-mono text-sm resize-none"></textarea>
+            <p class="text-xs text-slate-500 mt-2">💡 Copie direto do Excel/Google Sheets (Ctrl+C) e cole aqui</p>
+          </div>
+
+          <div id="import-preview" class="hidden mb-6">
+            <h3 class="text-sm font-semibold text-slate-300 mb-3">Prévia (primeiras linhas):</h3>
+            <div class="bg-slate-800/50 rounded-lg p-4 max-h-48 overflow-y-auto custom-scrollbar">
+              <table class="w-full text-xs">
+                <thead class="sticky top-0 bg-slate-700">
+                  <tr>
+                    <th class="text-left px-2 py-2 text-blue-400">ID</th>
+                    <th class="text-left px-2 py-2 text-blue-400">Região</th>
+                    <th class="text-left px-2 py-2 text-blue-400">Situação</th>
+                    <th class="text-left px-2 py-2 text-blue-400">Conformidade</th>
+                  </tr>
+                </thead>
+                <tbody id="preview-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-3">
+            <button onclick="previewImport()" class="px-6 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors font-medium">
+              Preview
+            </button>
+            <button onclick="executeImport()" id="import-btn" class="btn-primary px-6 py-2.5 rounded-lg font-medium text-white flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              Importar Dados
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-[5000] flex items-center justify-center">
+      <div class="glass-card rounded-2xl p-8 flex flex-col items-center">
+        <div class="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4"></div>
+        <p id="loading-text" class="text-slate-300">Carregando...</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="fixed top-6 right-6 z-[6000] space-y-3"></div>
+
+  <!-- Data SDK local (localStorage) -->
+  <script>
+    window.elementSdk = null;
+
+    window.dataSdk = {
+      _key: "fiscalizacoes_v1",
+      _handler: null,
+      _data: [],
+
+      async init(handler) {
+        this._handler = handler;
+        const raw = localStorage.getItem(this._key);
+        let parsed = [];
+        try { parsed = raw ? JSON.parse(raw) : []; } catch { parsed = []; }
+
+        this._data = parsed.map((r) => ({
+          __backendId: r.__backendId || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()),
+          ...r
+        }));
+
+        this._persist();
+        this._notify();
+        return { isOk: true };
+      },
+
+      _persist() {
+        localStorage.setItem(this._key, JSON.stringify(this._data));
+      },
+
+      _notify() {
+        this._handler?.onDataChanged?.(this._data);
+      },
+
+      async create(record) {
+        const rec = {
+          __backendId: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random(),
+          ...record
+        };
+        this._data.push(rec);
+        this._persist();
+        this._notify();
+        return { isOk: true };
+      },
+
+      async update(record) {
+        const idx = this._data.findIndex((r) => r.__backendId === record.__backendId);
+        if (idx === -1) return { isOk: false };
+        this._data[idx] = { ...this._data[idx], ...record };
+        this._persist();
+        this._notify();
+        return { isOk: true };
+      },
+
+      async delete(record) {
+        const before = this._data.length;
+        this._data = this._data.filter((r) => r.__backendId !== record.__backendId);
+        this._persist();
+        this._notify();
+        return { isOk: this._data.length !== before };
+      }
+    };
+  </script>
+
+  <!-- App Script -->
+  <script>
+    // Global State
+    let allFiscalizacoes = [];
+    let filteredFiscalizacoes = [];
+    let currentFiscalizacao = null;
+    let map = null;
+    let markerClusterGroup = null;
+    let markers = {};
+    let isSelectingLocation = false;
+    let tempMarker = null;
+    let deleteTarget = null;
+
+    const defaultConfig = {
+      app_title: 'Sistema de Fiscalizações',
+      subtitle: 'Monitoramento em Tempo Real'
+    };
+
+    const regionCoordinates = {
+      'Plano Piloto': [-15.7942, -47.8822],
+      'Gama': [-16.0192, -48.0617],
+      'Taguatinga': [-15.8364, -48.0564],
+      'Brazlândia': [-15.6759, -48.2125],
+      'Sobradinho': [-15.6500, -47.7878],
+      'Planaltina': [-15.6204, -47.6482],
+      'Paranoá': [-15.7735, -47.7767],
+      'Núcleo Bandeirante': [-15.8714, -47.9675],
+      'Ceilândia': [-15.8197, -48.1117],
+      'Guará': [-15.8333, -47.9833],
+      'Cruzeiro': [-15.7942, -47.9311],
+      'Samambaia': [-15.8789, -48.0992],
+      'Santa Maria': [-16.0197, -48.0028],
+      'São Sebastião': [-15.9025, -47.7631],
+      'Recanto das Emas': [-15.9167, -48.0667],
+      'Lago Sul': [-15.8333, -47.8500],
+      'Riacho Fundo': [-15.8833, -48.0167],
+      'Lago Norte': [-15.7333, -47.8500],
+      'Candangolândia': [-15.8500, -47.9500],
+      'Águas Claras': [-15.8333, -48.0333],
+      'Riacho Fundo II': [-15.9000, -48.0500],
+      'Sudoeste/Octogonal': [-15.8000, -47.9167],
+      'Varjão': [-15.7167, -47.8667],
+      'Park Way': [-15.9000, -47.9500],
+      'SCIA/Estrutural': [-15.7833, -47.9833],
+      'Sobradinho II': [-15.6333, -47.8000],
+      'Jardim Botânico': [-15.8667, -47.8000],
+      'Itapoã': [-15.7500, -47.7667],
+      'SIA': [-15.8167, -47.9500],
+      'Vicente Pires': [-15.8000, -48.0333],
+      'Fercal': [-15.6000, -47.9000],
+      'Sol Nascente/Pôr do Sol': [-15.8000, -48.1333],
+      'Arniqueira': [-15.8500, -48.0333]
+    };
+
+    const dataHandler = {
+      onDataChanged(data) {
+        allFiscalizacoes = data;
+        updateFiltersOptions();
+        applyFilters();
+        updateDashboard();
+      }
+    };
+
+    async function initDataSDK() {
+      const result = await window.dataSdk.init(dataHandler);
+      if (!result.isOk) showToast('Erro ao inicializar sistema de dados', 'error');
+    }
+
+    function initMap() {
+      map = L.map('map').setView([-15.7942, -47.8822], 11);
+
+      // ✅ Tema padrão OSM
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      markerClusterGroup = L.markerClusterGroup({
+        maxClusterRadius: 50,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true
+      });
+      map.addLayer(markerClusterGroup);
+
+      map.on('click', handleMapClick);
+    }
+
+    function toggleFiltersPanel(open) {
+      const drawer = document.getElementById('filters-drawer');
+      const overlay = document.getElementById('filters-overlay');
+      if (!drawer || !overlay) return;
+
+      if (open) {
+        overlay.classList.remove('hidden');
+        drawer.classList.remove('-translate-x-full');
+        document.body.classList.add('overflow-hidden');
+      } else {
+        overlay.classList.add('hidden');
+        drawer.classList.add('-translate-x-full');
+        document.body.classList.remove('overflow-hidden');
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') toggleFiltersPanel(false);
+    });
+
+    function createMarkerIcon(situacao) {
+      let color;
+      switch (situacao) {
+        case 'Em Andamento': color = '#f59e0b'; break;
+        case 'Concluída': color = '#10b981'; break;
+        case 'Pendente': color = '#ef4444'; break;
+        default: color = '#3b82f6';
+      }
+
+      return L.divIcon({
+        className: 'custom-marker',
+        html: `
+          <div style="
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, ${color}dd, ${color});
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 3px solid white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">
+            <div style="transform: rotate(45deg); font-size: 14px;">📋</div>
+          </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+      });
+    }
+
+    function updateMapMarkers() {
+      markerClusterGroup.clearLayers();
+      markers = {};
+
+      filteredFiscalizacoes.forEach(fisc => {
+        if (fisc.latitude && fisc.longitude) {
+          const marker = L.marker([fisc.latitude, fisc.longitude], {
+            icon: createMarkerIcon(fisc.situacao)
+          });
+
+          marker.bindPopup(createPopupContent(fisc), {
+            maxWidth: 300,
+            className: 'custom-popup'
+          });
+
+          marker.on('click', () => showDetailPanel(fisc));
+
+          markerClusterGroup.addLayer(marker);
+          markers[fisc.__backendId] = marker;
+        }
+      });
+
+      if (filteredFiscalizacoes.length > 0 && Object.keys(markers).length > 0) {
+        const bounds = markerClusterGroup.getBounds();
+        if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    function createPopupContent(fisc) {
+      const statusClass = fisc.situacao === 'Em Andamento' ? 'status-andamento' :
+                          fisc.situacao === 'Concluída' ? 'status-concluida' : 'status-pendente';
+
+      return `
+        <div style="padding: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <span style="font-weight:700;font-size:16px;color:#1e293b;">${fisc.id}</span>
+            <span class="${statusClass}" style="font-size:11px;padding:3px 8px;">${fisc.situacao}</span>
+          </div>
+          <div style="color:#64748b;font-size:13px;margin-bottom:8px;">
+            <strong>Região:</strong> ${fisc.regiao_administrativa || '-'}
+          </div>
+          <div style="color:#64748b;font-size:13px;margin-bottom:8px;">
+            <strong>Processo:</strong> ${fisc.processo_sei || '-'}
+          </div>
+          ${fisc.indice_conformidade ? `
+            <div style="margin-top:12px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:12px;color:#64748b;">Conformidade</span>
+                <span style="font-size:12px;font-weight:600;color:#1e293b;">${fisc.indice_conformidade}%</span>
+              </div>
+              <div style="background:#e2e8f0;border-radius:4px;height:6px;overflow:hidden;">
+                <div style="background:linear-gradient(90deg,#3b82f6,#2563eb);height:100%;width:${fisc.indice_conformidade}%;"></div>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function handleMapClick(e) {
+      if (!isSelectingLocation) return;
+
+      const { lat, lng } = e.latlng;
+
+      if (tempMarker) map.removeLayer(tempMarker);
+
+      tempMarker = L.marker([lat, lng], {
+        icon: L.divIcon({
+          className: 'temp-marker',
+          html: `
+            <div style="
+              width: 40px;
+              height: 40px;
+              background: linear-gradient(135deg, #3b82f6, #2563eb);
+              border-radius: 50%;
+              border: 4px solid white;
+              box-shadow: 0 4px 15px rgba(59, 130, 246, 0.5);
+              animation: pulse 1.5s infinite;
+            "></div>
+          `,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
+        })
+      }).addTo(map);
+
+      document.getElementById('form-lat').value = lat.toFixed(6);
+      document.getElementById('form-lng').value = lng.toFixed(6);
+
+      disableMapSelection();
+      document.getElementById('form-modal').classList.remove('hidden');
+    }
+
+    function enableMapSelection() {
+      isSelectingLocation = true;
+      document.getElementById('form-modal').classList.add('hidden');
+      document.getElementById('map-hint').classList.remove('hidden');
+      map.getContainer().style.cursor = 'crosshair';
+    }
+
+    function disableMapSelection() {
+      isSelectingLocation = false;
+      document.getElementById('map-hint').classList.add('hidden');
+      map.getContainer().style.cursor = '';
+    }
+
+    function updateFiltersOptions() {
+      const regioes = [...new Set(allFiscalizacoes.map(f => f.regiao_administrativa).filter(Boolean))].sort();
+      const anos = [...new Set(allFiscalizacoes.map(f => f.ano).filter(Boolean))].sort((a, b) => b - a);
+
+      const regiaoSelect = document.getElementById('filter-regiao');
+      const currentRegiao = regiaoSelect.value;
+      regiaoSelect.innerHTML = '<option value="">Todas as Regiões</option>';
+      regioes.forEach(r => {
+        const option = document.createElement('option');
+        option.value = r;
+        option.textContent = r;
+        if (r === currentRegiao) option.selected = true;
+        regiaoSelect.appendChild(option);
+      });
+
+      const anoSelect = document.getElementById('filter-ano');
+      const currentAno = anoSelect.value;
+      anoSelect.innerHTML = '<option value="">Todos os Anos</option>';
+      anos.forEach(a => {
+        const option = document.createElement('option');
+        option.value = a;
+        option.textContent = a;
+        if (String(a) === currentAno) option.selected = true;
+        anoSelect.appendChild(option);
+      });
+    }
+
+    function applyFilters() {
+      const search = document.getElementById('filter-search').value.toLowerCase();
+      const regiao = document.getElementById('filter-regiao').value;
+      const situacao = document.getElementById('filter-situacao').value;
+      const ano = document.getElementById('filter-ano').value;
+      const conformidade = parseInt(document.getElementById('filter-conformidade').value, 10);
+
+      filteredFiscalizacoes = allFiscalizacoes.filter(f => {
+        if (search && !f.id?.toLowerCase().includes(search) &&
+            !f.processo_sei?.toLowerCase().includes(search) &&
+            !f.destinatario?.toLowerCase().includes(search)) return false;
+
+        if (regiao && f.regiao_administrativa !== regiao) return false;
+        if (situacao && f.situacao !== situacao) return false;
+        if (ano && String(f.ano) !== ano) return false;
+        if (conformidade && (!f.indice_conformidade || f.indice_conformidade < conformidade)) return false;
+        return true;
+      });
+
+      updateMapMarkers();
+      renderFiscalizacoesList();
+      document.getElementById('count-badge').textContent = filteredFiscalizacoes.length;
+    }
+
+    function clearFilters() {
+      document.getElementById('filter-search').value = '';
+      document.getElementById('filter-regiao').value = '';
+      document.getElementById('filter-situacao').value = '';
+      document.getElementById('filter-ano').value = '';
+      document.getElementById('filter-conformidade').value = 0;
+      document.getElementById('conformidade-label').textContent = '0%+';
+      applyFilters();
+    }
+
+    function updateConformidadeLabel() {
+      const value = document.getElementById('filter-conformidade').value;
+      document.getElementById('conformidade-label').textContent = `${value}%+`;
+    }
+
+    function renderFiscalizacoesList() {
+      const container = document.getElementById('fiscalizacoes-list');
+
+      if (filteredFiscalizacoes.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-slate-500">
+            <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+            </svg>
+            <p class="text-sm">Nenhuma fiscalização encontrada</p>
+            <p class="text-xs mt-1">Ajuste os filtros ou adicione uma nova</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filteredFiscalizacoes.map(fisc => {
+        const statusClass = fisc.situacao === 'Em Andamento' ? 'status-andamento' :
+                            fisc.situacao === 'Concluída' ? 'status-concluida' : 'status-pendente';
+
+        return `
+          <div class="p-3 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 cursor-pointer transition-colors border border-slate-700/50"
+               onclick="focusFiscalizacao('${fisc.__backendId}')">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-semibold text-sm">${fisc.id}</span>
+              <span class="${statusClass}" style="font-size: 10px; padding: 2px 8px;">${fisc.situacao}</span>
+            </div>
+            <p class="text-xs text-slate-400 truncate">${fisc.regiao_administrativa || 'Sem região'}</p>
+            ${fisc.indice_conformidade ? `
+              <div class="mt-2 flex items-center gap-2">
+                <div class="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                  <div class="h-full bg-blue-500 rounded-full" style="width: ${fisc.indice_conformidade}%"></div>
+                </div>
+                <span class="text-xs text-blue-400">${fisc.indice_conformidade}%</span>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function focusFiscalizacao(backendId) {
+      const fisc = allFiscalizacoes.find(f => f.__backendId === backendId);
+      if (!fisc) return;
+
+      if (fisc.latitude && fisc.longitude && markers[backendId]) {
+        map.setView([fisc.latitude, fisc.longitude], 15);
+        markers[backendId].openPopup();
+      }
+      showDetailPanel(fisc);
+    }
+
+    function createDetailField(label, value) {
+      return `
+        <div class="bg-slate-800/50 rounded-lg p-3">
+          <p class="text-xs text-slate-500 mb-1">${label}</p>
+          <p class="text-sm font-medium text-slate-200">${value || '-'}</p>
+        </div>
+      `;
+    }
+
+    function showDetailPanel(fisc) {
+      currentFiscalizacao = fisc;
+      const panel = document.getElementById('detail-panel');
+      const content = document.getElementById('detail-content');
+
+      const statusClass = fisc.situacao === 'Em Andamento' ? 'status-andamento' :
+                          fisc.situacao === 'Concluída' ? 'status-concluida' : 'status-pendente';
+
+      document.getElementById('detail-title').textContent = fisc.id;
+
+      document.getElementById('delete-detail-btn').onclick = () => confirmDelete(fisc);
+
+      content.innerHTML = `
+        <div class="space-y-6">
+          <div class="flex items-center justify-center">
+            <span class="${statusClass} text-base">${fisc.situacao}</span>
+          </div>
+
+          <div class="space-y-3">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider">Informações Básicas</h3>
+            <div class="grid grid-cols-2 gap-3">
+              ${createDetailField('Nº Processo SEI', fisc.processo_sei)}
+              ${createDetailField('Ano', fisc.ano)}
+              ${createDetailField('Região', fisc.regiao_administrativa)}
+              ${createDetailField('Destinatário', fisc.destinatario)}
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider">Classificação</h3>
+            <div class="grid grid-cols-2 gap-3">
+              ${createDetailField('Tipo', fisc.direta_indireta)}
+              ${createDetailField('Programação', fisc.programada)}
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider">Documento</h3>
+            <div class="grid grid-cols-2 gap-3">
+              ${createDetailField('Tipo', fisc.tipo_documento)}
+              ${createDetailField('Nº SEI', fisc.sei_documento)}
+              ${createDetailField('Data', fisc.data ? new Date(fisc.data).toLocaleDateString('pt-BR') : null)}
+            </div>
+
+            ${fisc.objetivo ? `
+              <div class="mt-3">
+                <p class="text-xs text-slate-500 mb-1">Objetivo</p>
+                <p class="text-sm text-slate-300 bg-slate-800/50 rounded-lg p-3">${fisc.objetivo}</p>
+              </div>
+            ` : ''}
+          </div>
+
+          ${(fisc.latitude && fisc.longitude) ? `
+            <div class="space-y-3">
+              <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider">Localização</h3>
+              <div class="bg-slate-800/50 rounded-lg p-3">
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <p class="text-xs text-slate-500">Latitude</p>
+                    <p class="text-sm font-mono text-slate-300">${fisc.latitude}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-slate-500">Longitude</p>
+                    <p class="text-sm font-mono text-slate-300">${fisc.longitude}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      panel.classList.remove('hidden');
+    }
+
+    function closeDetailPanel() {
+      document.getElementById('detail-panel').classList.add('hidden');
+      currentFiscalizacao = null;
+    }
+
+    function openAddModal() {
+      document.getElementById('modal-title').innerHTML = `
+        <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Nova Fiscalização
+      `;
+      document.getElementById('submit-text').textContent = 'Salvar Fiscalização';
+      document.getElementById('fiscalizacao-form').reset();
+      document.getElementById('form-backend-id').value = '';
+      document.getElementById('form-ano').value = new Date().getFullYear();
+      document.getElementById('form-modal').classList.remove('hidden');
+    }
+
+    function editCurrentFiscalizacao() {
+      if (!currentFiscalizacao) return;
+
+      document.getElementById('modal-title').innerHTML = `
+        <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+        </svg>
+        Editar Fiscalização
+      `;
+      document.getElementById('submit-text').textContent = 'Atualizar Fiscalização';
+
+      document.getElementById('form-backend-id').value = currentFiscalizacao.__backendId;
+      document.getElementById('form-id').value = currentFiscalizacao.id || '';
+      document.getElementById('form-processo-sei').value = currentFiscalizacao.processo_sei || '';
+      document.getElementById('form-ano').value = currentFiscalizacao.ano || '';
+      document.getElementById('form-regiao').value = currentFiscalizacao.regiao_administrativa || '';
+      document.getElementById('form-lat').value = currentFiscalizacao.latitude || '';
+      document.getElementById('form-lng').value = currentFiscalizacao.longitude || '';
+      document.getElementById('form-situacao').value = currentFiscalizacao.situacao || '';
+      document.getElementById('form-direta').value = currentFiscalizacao.direta_indireta || '';
+      document.getElementById('form-programada').value = currentFiscalizacao.programada || '';
+      document.getElementById('form-conformidade').value = currentFiscalizacao.indice_conformidade || '';
+      document.getElementById('form-tipo-doc').value = currentFiscalizacao.tipo_documento || '';
+      document.getElementById('form-sei-doc').value = currentFiscalizacao.sei_documento || '';
+      document.getElementById('form-data').value = currentFiscalizacao.data || '';
+      document.getElementById('form-objetivo').value = currentFiscalizacao.objetivo || '';
+      document.getElementById('form-destinatario').value = currentFiscalizacao.destinatario || '';
+      document.getElementById('form-constatacoes').value = currentFiscalizacao.constatacoes || '';
+      document.getElementById('form-nao-conformes').value = currentFiscalizacao.constatacoes_nao_conformes || '';
+      document.getElementById('form-recomendacoes').value = currentFiscalizacao.recomendacoes || '';
+      document.getElementById('form-determinacoes').value = currentFiscalizacao.determinacoes || '';
+      document.getElementById('form-tn').value = currentFiscalizacao.termos_notificacao || '';
+      document.getElementById('form-ai').value = currentFiscalizacao.autos_infracao || '';
+      document.getElementById('form-tac').value = currentFiscalizacao.termos_ajuste || '';
+
+      closeDetailPanel();
+      document.getElementById('form-modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('form-modal').classList.add('hidden');
+      if (tempMarker) {
+        map.removeLayer(tempMarker);
+        tempMarker = null;
+      }
+      disableMapSelection();
+    }
+
+    async function handleSubmit(event) {
+      event.preventDefault();
+
+      const backendId = document.getElementById('form-backend-id').value;
+      const isEditing = !!backendId;
+
+      if (!isEditing && allFiscalizacoes.length >= 999) {
+        showToast('Limite de 999 fiscalizações atingido. Exclua algumas para continuar.', 'error');
+        return;
+      }
+
+      let lat = parseFloat(document.getElementById('form-lat').value);
+      let lng = parseFloat(document.getElementById('form-lng').value);
+      const regiao = document.getElementById('form-regiao').value;
+
+      if ((!lat || !lng) && regiao && regionCoordinates[regiao]) {
+        const [baseLat, baseLng] = regionCoordinates[regiao];
+        lat = baseLat + (Math.random() - 0.5) * 0.02;
+        lng = baseLng + (Math.random() - 0.5) * 0.02;
+      }
+
+      const fiscData = {
+        id: document.getElementById('form-id').value,
+        processo_sei: document.getElementById('form-processo-sei').value,
+        ano: parseInt(document.getElementById('form-ano').value, 10) || null,
+        objetivo: document.getElementById('form-objetivo').value,
+        regiao_administrativa: regiao,
+        situacao: document.getElementById('form-situacao').value,
+        tipo_documento: document.getElementById('form-tipo-doc').value,
+        destinatario: document.getElementById('form-destinatario').value,
+        direta_indireta: document.getElementById('form-direta').value,
+        programada: document.getElementById('form-programada').value,
+        sei_documento: document.getElementById('form-sei-doc').value,
+        data: document.getElementById('form-data').value,
+        constatacoes: document.getElementById('form-constatacoes').value,
+        constatacoes_nao_conformes: parseInt(document.getElementById('form-nao-conformes').value, 10) || null,
+        recomendacoes: document.getElementById('form-recomendacoes').value,
+        determinacoes: document.getElementById('form-determinacoes').value,
+        termos_notificacao: parseInt(document.getElementById('form-tn').value, 10) || null,
+        autos_infracao: parseInt(document.getElementById('form-ai').value, 10) || null,
+        termos_ajuste: parseInt(document.getElementById('form-tac').value, 10) || null,
+        indice_conformidade: parseFloat(document.getElementById('form-conformidade').value) || null,
+        latitude: lat || null,
+        longitude: lng || null
+      };
+
+      showLoading(isEditing ? 'Atualizando...' : 'Salvando...');
+
+      let result;
+      if (isEditing) {
+        const existingRecord = allFiscalizacoes.find(f => f.__backendId === backendId);
+        if (existingRecord) {
+          result = await window.dataSdk.update({ ...existingRecord, ...fiscData, __backendId: backendId });
+        } else {
+          result = { isOk: false };
+        }
+      } else {
+        result = await window.dataSdk.create(fiscData);
+      }
+
+      hideLoading();
+
+      if (result && result.isOk) {
+        showToast(isEditing ? 'Fiscalização atualizada!' : 'Fiscalização criada!', 'success');
+        closeModal();
+      } else {
+        showToast('Erro ao salvar fiscalização', 'error');
+      }
+    }
+
+    function confirmDelete(fisc) {
+      deleteTarget = fisc;
+      document.getElementById('delete-confirm').classList.remove('hidden');
+      document.getElementById('confirm-delete-btn').onclick = executeDelete;
+    }
+
+    function cancelDelete() {
+      deleteTarget = null;
+      document.getElementById('delete-confirm').classList.add('hidden');
+    }
+
+    async function executeDelete() {
+      if (!deleteTarget) return;
+
+      document.getElementById('delete-confirm').classList.add('hidden');
+      showLoading('Excluindo...');
+
+      const result = await window.dataSdk.delete(deleteTarget);
+
+      hideLoading();
+
+      if (result.isOk) {
+        showToast('Fiscalização excluída!', 'success');
+        closeDetailPanel();
+      } else {
+        showToast('Erro ao excluir fiscalização', 'error');
+      }
+
+      deleteTarget = null;
+    }
+
+    function toggleDashboard() {
+      const panel = document.getElementById('dashboard-panel');
+      panel.classList.toggle('hidden');
+      if (!panel.classList.contains('hidden')) updateDashboard();
+    }
+
+    function updateDashboard() {
+      const total = allFiscalizacoes.length;
+      const andamento = allFiscalizacoes.filter(f => f.situacao === 'Em Andamento').length;
+      const concluida = allFiscalizacoes.filter(f => f.situacao === 'Concluída').length;
+      const pendente = allFiscalizacoes.filter(f => f.situacao === 'Pendente').length;
+
+      const conformidades = allFiscalizacoes.filter(f => f.indice_conformidade).map(f => f.indice_conformidade);
+      const avgConformidade = conformidades.length > 0
+        ? Math.round(conformidades.reduce((a, b) => a + b, 0) / conformidades.length)
+        : 0;
+
+      const totalAI = allFiscalizacoes.reduce((sum, f) => sum + (f.autos_infracao || 0), 0);
+      const totalTN = allFiscalizacoes.reduce((sum, f) => sum + (f.termos_notificacao || 0), 0);
+
+      document.getElementById('metric-total').textContent = total;
+      document.getElementById('metric-andamento').textContent = andamento;
+      document.getElementById('metric-concluida').textContent = concluida;
+      document.getElementById('metric-pendente').textContent = pendente;
+      document.getElementById('metric-conformidade').textContent = `${avgConformidade}%`;
+      document.getElementById('metric-ai').textContent = totalAI;
+      document.getElementById('metric-tn').textContent = totalTN;
+
+      const maxStatus = Math.max(andamento, concluida, pendente, 1);
+      document.getElementById('chart-situacao').innerHTML = `
+        <div class="flex flex-col items-center">
+          <div class="w-16 bg-slate-700 rounded-t-lg relative" style="height: ${(andamento / maxStatus) * 150}px; min-height: 20px;">
+            <div class="absolute inset-0 bg-gradient-to-t from-amber-500 to-yellow-400 rounded-t-lg"></div>
+          </div>
+          <p class="text-xl font-bold mt-2 text-amber-400">${andamento}</p>
+          <p class="text-xs text-slate-400">Andamento</p>
+        </div>
+        <div class="flex flex-col items-center">
+          <div class="w-16 bg-slate-700 rounded-t-lg relative" style="height: ${(concluida / maxStatus) * 150}px; min-height: 20px;">
+            <div class="absolute inset-0 bg-gradient-to-t from-emerald-500 to-green-400 rounded-t-lg"></div>
+          </div>
+          <p class="text-xl font-bold mt-2 text-emerald-400">${concluida}</p>
+          <p class="text-xs text-slate-400">Concluída</p>
+        </div>
+        <div class="flex flex-col items-center">
+          <div class="w-16 bg-slate-700 rounded-t-lg relative" style="height: ${(pendente / maxStatus) * 150}px; min-height: 20px;">
+            <div class="absolute inset-0 bg-gradient-to-t from-red-500 to-rose-400 rounded-t-lg"></div>
+          </div>
+          <p class="text-xl font-bold mt-2 text-red-400">${pendente}</p>
+          <p class="text-xs text-slate-400">Pendente</p>
+        </div>
+      `;
+
+      const regionCounts = {};
+      allFiscalizacoes.forEach(f => {
+        if (f.regiao_administrativa) regionCounts[f.regiao_administrativa] = (regionCounts[f.regiao_administrativa] || 0) + 1;
+      });
+
+      const sortedRegions = Object.entries(regionCounts).sort((a, b) => b[1] - a[1]);
+      const maxRegion = sortedRegions.length > 0 ? sortedRegions[0][1] : 1;
+
+      document.getElementById('chart-regiao').innerHTML = sortedRegions.length > 0
+        ? sortedRegions.map(([region, count]) => `
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-400 w-32 truncate">${region}</span>
+            <div class="flex-1 h-5 bg-slate-700 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full transition-all duration-500"
+                   style="width: ${(count / maxRegion) * 100}%"></div>
+            </div>
+            <span class="text-sm font-semibold text-blue-400 min-w-[30px] text-right">${count}</span>
+          </div>
+        `).join('')
+        : '<p class="text-center text-slate-500 py-8">Nenhuma região cadastrada</p>';
+    }
+
+    function exportToCSV() {
+      if (allFiscalizacoes.length === 0) {
+        showToast('Nenhuma fiscalização para exportar', 'warning');
+        return;
+      }
+
+      const headers = [
+        'ID', 'Processo SEI', 'Ano', 'Objetivo', 'Região', 'Situação',
+        'Tipo Documento', 'Destinatário', 'Direta/Indireta', 'Programada',
+        'SEI Documento', 'Data', 'Constatações', 'Não Conformes',
+        'Recomendações', 'Determinações', 'TN', 'AI', 'TAC',
+        'Conformidade', 'Latitude', 'Longitude'
+      ];
+
+      const rows = allFiscalizacoes.map(f => [
+        f.id, f.processo_sei, f.ano, f.objetivo, f.regiao_administrativa,
+        f.situacao, f.tipo_documento, f.destinatario, f.direta_indireta,
+        f.programada, f.sei_documento, f.data, f.constatacoes,
+        f.constatacoes_nao_conformes, f.recomendacoes, f.determinacoes,
+        f.termos_notificacao, f.autos_infracao, f.termos_ajuste,
+        f.indice_conformidade, f.latitude, f.longitude
+      ]);
+
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${(cell ?? '').toString().replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `fiscalizacoes_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+
+      showToast('Arquivo exportado!', 'success');
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+
+      const toast = document.createElement('div');
+
+      const colors = {
+        success: 'bg-emerald-600',
+        error: 'bg-red-600',
+        warning: 'bg-amber-600',
+        info: 'bg-blue-600'
+      };
+
+      const icons = {
+        success: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>',
+        error: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>',
+        warning: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>',
+        info: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>'
+      };
+
+      toast.className = `${colors[type]} px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 fade-in`;
+      toast.innerHTML = `
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">${icons[type]}</svg>
+        <span class="text-sm font-medium text-white">${message}</span>
+      `;
+
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    function showLoading(text = 'Carregando...') {
+      document.getElementById('loading-text').textContent = text;
+      document.getElementById('loading-overlay').classList.remove('hidden');
+    }
+
+    function hideLoading() {
+      document.getElementById('loading-overlay').classList.add('hidden');
+    }
+
+    function openImportModal() {
+      document.getElementById('import-modal').classList.remove('hidden');
+      document.getElementById('import-textarea').value = '';
+      document.getElementById('import-preview').classList.add('hidden');
+    }
+
+    function closeImportModal() {
+      document.getElementById('import-modal').classList.add('hidden');
+      document.getElementById('import-textarea').value = '';
+      document.getElementById('import-preview').classList.add('hidden');
+    }
+
+    function previewImport() {
+      const text = document.getElementById('import-textarea').value.trim();
+      if (!text) {
+        showToast('Cole os dados primeiro', 'warning');
+        return;
+      }
+
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const sample = lines.slice(0, 3).join('\n');
+      const delim = sample.includes('\t') ? '\t' : ',';
+
+      const previewBody = document.getElementById('preview-body');
+      previewBody.innerHTML = '';
+
+      // tenta pular cabeçalho se existir
+      const firstCells = lines[0].split(delim).map(s => (s ?? '').toString().trim());
+      const hasHeader = firstCells.some(c => /id/i.test(c)) && firstCells.some(c => /processo|sei|nº/i.test(c));
+      const startIndex = hasHeader ? 1 : 0;
+
+      for (let i = startIndex; i < Math.min(startIndex + 5, lines.length); i++) {
+        const cells = lines[i].split(delim);
+        const row = document.createElement('tr');
+        row.className = 'border-t border-slate-600';
+        row.innerHTML = `
+          <td class="px-2 py-2 text-slate-300">${cells[0] || '-'}</td>
+          <td class="px-2 py-2 text-slate-300">${cells[4] || '-'}</td>
+          <td class="px-2 py-2 text-slate-300">${cells[5] || '-'}</td>
+          <td class="px-2 py-2 text-slate-300">${cells[19] || '-'}</td>
+        `;
+        previewBody.appendChild(row);
+      }
+
+      document.getElementById('import-preview').classList.remove('hidden');
+    }
+
+    async function executeImport() {
+      const text = document.getElementById('import-textarea').value.trim();
+      if (!text) {
+        showToast('Cole os dados primeiro', 'warning');
+        return;
+      }
+
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length < 1) {
+        showToast('Dados inválidos', 'error');
+        return;
+      }
+
+      const sample = lines.slice(0, 3).join('\n');
+      const delim = sample.includes('\t') ? '\t' : ',';
+
+      const norm = (v) => (v ?? '').toString().trim();
+
+      const parseNumber = (v) => {
+        const s = norm(v);
+        if (!s || s === '#ERROR!') return null;
+        const cleaned = s.replace(/\./g, '').replace(',', '.');
+        const n = Number(cleaned);
+        return Number.isFinite(n) ? n : null;
+      };
+
+      const parseIntSafe = (v) => {
+        const n = parseNumber(v);
+        return n === null ? null : Math.trunc(n);
+      };
+
+      const parseDateToISO = (v) => {
+        const s = norm(v);
+        if (!s || s === '#ERROR!') return '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+        if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+          const [a, b, c] = s.split('/').map(x => parseInt(x, 10));
+          let day, month;
+          if (a > 12) { day = a; month = b; } else { month = a; day = b; }
+          const yyyy = c;
+          const mm = String(month).padStart(2, '0');
+          const dd = String(day).padStart(2, '0');
+          return `${yyyy}-${mm}-${dd}`;
+        }
+        return '';
+      };
+
+      const firstCells = lines[0].split(delim).map(norm);
+      const hasHeader =
+        firstCells.some(c => /id/i.test(c)) &&
+        firstCells.some(c => /processo|sei|nº/i.test(c));
+
+      const startIndex = hasHeader ? 1 : 0;
+      const dataLines = lines.slice(startIndex);
+
+      if (dataLines.length < 1) {
+        showToast('Dados inválidos', 'error');
+        return;
+      }
+
+      const newCount = dataLines.length;
+      if (allFiscalizacoes.length + newCount > 999) {
+        showToast(`Você tem ${allFiscalizacoes.length} registros. Máximo é 999.`, 'error');
+        return;
+      }
+
+      showLoading(`Importando ${newCount} registros...`);
+      const btn = document.getElementById('import-btn');
+      btn.disabled = true;
+
+      let imported = 0;
+      let failed = 0;
+
+      for (let i = 0; i < dataLines.length; i++) {
+        const line = dataLines[i];
+        const cells = line.split(delim);
+
+        if (cells.length < 6) { failed++; continue; }
+
+        let regiaoRaw = norm(cells[4]);
+        let regiao = regiaoRaw;
+
+        const brasiliaCenter = { lat: -15.7942, lng: -47.8822 };
+
+        if (/^distrito\s*federal$/i.test(regiaoRaw)) {
+          regiao = 'Plano Piloto';
+        }
+
+        let lat = parseNumber(cells[20]);
+        let lng = parseNumber(cells[21]);
+
+        if ((!lat || !lng)) {
+          if (regiao && regionCoordinates[regiao]) {
+            const [baseLat, baseLng] = regionCoordinates[regiao];
+            lat = baseLat + (Math.random() - 0.5) * 0.02;
+            lng = baseLng + (Math.random() - 0.5) * 0.02;
+          } else if (/^distrito\s*federal$/i.test(regiaoRaw)) {
+            lat = brasiliaCenter.lat + (Math.random() - 0.5) * 0.02;
+            lng = brasiliaCenter.lng + (Math.random() - 0.5) * 0.02;
+          }
+        }
+
+        const fiscData = {
+          id: norm(cells[0]),
+          processo_sei: norm(cells[1]),
+          ano: parseIntSafe(cells[2]),
+          objetivo: norm(cells[3]),
+          regiao_administrativa: regiao || null,
+          situacao: norm(cells[5]),
+          tipo_documento: norm(cells[6]),
+          destinatario: norm(cells[7]),
+          direta_indireta: norm(cells[8]),
+          programada: norm(cells[9]),
+          sei_documento: norm(cells[10]),
+          data: parseDateToISO(cells[11]),
+          constatacoes: norm(cells[12]),
+          constatacoes_nao_conformes: parseIntSafe(cells[13]),
+          recomendacoes: norm(cells[14]),
+          determinacoes: norm(cells[15]),
+          termos_notificacao: parseIntSafe(cells[16]),
+          autos_infracao: parseIntSafe(cells[17]),
+          termos_ajuste: parseIntSafe(cells[18]),
+          indice_conformidade: parseNumber(cells[19]),
+          latitude: lat || null,
+          longitude: lng || null
+        };
+
+        const result = await window.dataSdk.create(fiscData);
+        if (result && result.isOk) imported++;
+        else failed++;
+
+        const progress = Math.round(((i + 1) / dataLines.length) * 100);
+        document.getElementById('loading-text').textContent =
+          `Importando... ${progress}% (${imported}/${newCount})`;
+      }
+
+      hideLoading();
+      btn.disabled = false;
+
+      if (imported > 0) {
+        showToast(`✅ ${imported} fiscalizações importadas!`, 'success');
+        closeImportModal();
+      }
+      if (failed > 0) {
+        showToast(`⚠️ ${failed} registros falharam`, 'warning');
+      }
+    }
+
+    async function init() {
+      initMap();
+      await initDataSDK();
+    }
+
+    init();
+  </script>
+</body>
+</html>
